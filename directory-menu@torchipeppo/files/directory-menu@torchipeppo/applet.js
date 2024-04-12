@@ -23,7 +23,6 @@ const Cinnamon = imports.gi.Cinnamon;
 const Settings = imports.ui.settings;
 const Gettext = imports.gettext;
 
-
 const UUID = "directory-menu@torchipeppo";
 
 Gettext.bindtextdomain(UUID, GLib.get_home_dir() + "/.local/share/locale");
@@ -51,6 +50,7 @@ class CassettoneApplet extends Applet.TextIconApplet {
         this.settings.bind("icon-name", "icon_name", this.set_applet_icon_symbolic_name, null);
         this.settings.bind("label", "label", this.set_applet_label, null);
         this.settings.bind("tooltip", "tooltip_text", (txt) => this.set_applet_tooltip(_(txt)), null);
+        this.settings.bind("show-menu", "show_menu", this.set_keybinding, null);
         this.settings.bind("limit-characters", "limit_characters", null, null);
         this.settings.bind("character-limit", "character_limit", null, null);
         this.starting_uri = this.normalize_tilde(this.starting_uri);
@@ -63,7 +63,8 @@ class CassettoneApplet extends Applet.TextIconApplet {
         this.actor.connect('enter-event', Lang.bind(this, this.on_enter_event));
         this.actor.connect('button-release-event', Lang.bind(this, this.on_button_release_event));
 
-		this.setAllowedLayout(Applet.AllowedLayout.BOTH);
+        this.setAllowedLayout(Applet.AllowedLayout.BOTH);
+        this.set_keybinding();
     }
 
     normalize_tilde(path) {
@@ -79,8 +80,8 @@ class CassettoneApplet extends Applet.TextIconApplet {
 
         let x = Math.round(allocation.x1 / global.ui_scale);
         let y = Math.round(allocation.y1 / global.ui_scale);
-        let w = Math.round((allocation.x2 - allocation.x1) / global.ui_scale)
-        let h = Math.round((allocation.y2 - allocation.y1) / global.ui_scale)
+        let w = Math.round((allocation.x2 - allocation.x1) / global.ui_scale);
+        let h = Math.round((allocation.y2 - allocation.y1) / global.ui_scale);
 
         let final_x, final_y, final_o;
 
@@ -145,6 +146,11 @@ class CassettoneApplet extends Applet.TextIconApplet {
         }
         // end of Cinnamon wrappings
 
+        this.open_cassettone();
+        return true;
+    }
+
+    open_cassettone() {
         this._applet_tooltip.hide();
         this._applet_tooltip.preventShow = true;
 
@@ -162,10 +168,13 @@ class CassettoneApplet extends Applet.TextIconApplet {
         }
 
         Util.spawn_async(['python3', `${this.metadata.path}/popup_menu.py`, JSON.stringify(args)]);
-
-        return true;
     }
 
+    set_keybinding() {
+        Main.keybindingManager.addHotKey("show-directory-menu-" + this.instance_id,
+            this.show_menu,
+            Lang.bind(this, this.open_cassettone));
+    }
 }
 
 function main(metadata, orientation, panel_height, instance_id) {
