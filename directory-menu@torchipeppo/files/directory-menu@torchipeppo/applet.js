@@ -175,6 +175,10 @@ class CassettoneApplet extends Applet.TextIconApplet {
             this.show_menu,
             Lang.bind(this, this.open_cassettone));
     }
+
+    on_applet_removed_from_panel() {
+        Main.keybindingManager.removeHotKey("show-directory-menu-" + this.instance_id);
+    }
 }
 
 function main(metadata, orientation, panel_height, instance_id) {
