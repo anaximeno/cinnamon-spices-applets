@@ -58,10 +58,10 @@ class CassettoneApplet extends Applet.TextIconApplet {
         this.set_applet_tooltip(_(this.tooltip_text));
         this.set_applet_icon_symbolic_name(this.icon_name);
         this.set_show_label_in_vertical_panels(false);
-        this.set_applet_label(this.label)
+        this.set_applet_label(this.label);
 
-        this.actor.connect('enter-event', Lang.bind(this, this.on_enter_event));
-        this.actor.connect('button-release-event', Lang.bind(this, this.on_button_release_event));
+        this._enter_event_id = this.actor.connect('enter-event', Lang.bind(this, this.on_enter_event));
+        this._leave_event_id = this.actor.connect('button-release-event', Lang.bind(this, this.on_button_release_event));
 
         this.setAllowedLayout(Applet.AllowedLayout.BOTH);
         this.set_keybinding();
@@ -178,6 +178,9 @@ class CassettoneApplet extends Applet.TextIconApplet {
 
     on_applet_removed_from_panel() {
         Main.keybindingManager.removeHotKey("show-directory-menu-" + this.instance_id);
+        this.actor.disconnect(this._enter_event_id);
+        this.actor.disconnect(this._leave_event_id);
+        this.settings.finalize();
     }
 }
 
