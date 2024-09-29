@@ -22,7 +22,7 @@ const Applet = imports.ui.applet;
 const Gettext = imports.gettext;
 const SignalManager = imports.misc.signalManager;
 const GLib = imports.gi.GLib;
-const Util = imports.misc.util;
+const St = imports.gi.St;
 const { UUID } = require("./constants.js");
 
 
@@ -46,9 +46,11 @@ class PanelTweaksApplet extends Applet.IconApplet {
 	constructor(metadata, orientation, panelHeight, instanceId) {
 		super(orientation, panelHeight, instanceId);
 		this.metadata = metadata;
+		this.orientation = orientation;
 		this.settings = this._setup_applet_settings(metadata.uuid, instanceId);
 		this.signalsManager = new SignalManager.SignalManager(null);
-		this.iconPath = `${metadata.path}/../icons/panel-tweaks-icon-symbolic.svg`
+		this.iconHPath = `${metadata.path}/../icons/icon-horizontal-symbolic.svg`;
+		this.iconVPath = `${metadata.path}/../icons/icon-vertical-symbolic.svg`;
 
 		// --> declare panel settings controllers
 
@@ -117,8 +119,16 @@ class PanelTweaksApplet extends Applet.IconApplet {
 		this.destroy();
 	}
 
+	on_orientation_changed(orientation) {
+		this.orientation = orientation;
+		this.update_panel_applet_ui_state();
+	}
+
 	update_panel_applet_ui_state() {
-		this.set_applet_icon_symbolic_path(this.iconPath);
+		let iconPath = this.orientation == St.Side.LEFT ||
+			this.orientation == St.Side.RIGHT
+			? this.iconHPath : this.iconVPath;
+		this.set_applet_icon_symbolic_path(iconPath);
 		this.set_applet_tooltip(_(this.metadata.name), false);
 	}
 
