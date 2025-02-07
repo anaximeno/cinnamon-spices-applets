@@ -18,6 +18,7 @@
 'use strict';
 
 const { Clutter } = imports.gi;
+const Cairo = imports.cairo;
 
 class EyeMode {
     constructor(mode) {
@@ -219,6 +220,189 @@ class BulbMode extends EyeMode {
     }
 }
 
+class RoboticEyeMode extends EyeMode {
+    drawEye(area, options) {
+        const TWO_PI = 2 * Math.PI;
+        const [areaWidth, areaHeight] = area.allocation.get_size();
+        const centerX = areaWidth / 2;
+        const centerY = areaHeight / 2;
+
+        // Mouse position calculations
+        const mouseX = options.mouse_x - options.area_x - centerX;
+        const mouseY = options.mouse_y - options.area_y - centerY;
+        let mouseRad = Math.hypot(mouseX, mouseY);
+        const mouseAng = Math.atan2(mouseY, mouseX);
+
+        // Eye dimensions
+        const [topSize, latSize] = this.topAndLatSizes(areaWidth, areaHeight, options);
+        const eyeRad = Math.min(topSize - options.padding, latSize) / 2;
+
+        // Robotic features
+        const irisRad = eyeRad * 0.55;
+        const pupilRad = irisRad * 0.35;
+        const maxRad = Math.sqrt(eyeRad ** 2 - irisRad ** 2) - options.line_width;
+        mouseRad = Math.min(mouseRad, maxRad);
+
+        const irisR = Math.sqrt(eyeRad ** 2 - irisRad ** 2);
+        const eyeAng = Math.atan(mouseRad / irisR);
+
+        const cr = area.get_context();
+        this.clearArea(cr, areaWidth, areaHeight);
+
+        cr.save();
+        cr.translate(centerX, centerY);
+
+        // Metallic base using base_color
+        const baseColor = options.base_color;
+        const metallicGradient = new Cairo.LinearGradient(-eyeRad, -eyeRad, eyeRad, eyeRad);
+        metallicGradient.addColorStopRGBA(
+            0,
+            baseColor.red * 0.8 / 255,
+            baseColor.green * 0.8 / 255,
+            baseColor.blue * 0.8 / 255,
+            1
+        );
+        metallicGradient.addColorStopRGBA(
+            0.5,
+            baseColor.red * 1.2 / 255,
+            baseColor.green * 1.2 / 255,
+            baseColor.blue * 1.2 / 255,
+            1
+        );
+        metallicGradient.addColorStopRGBA(
+            1,
+            baseColor.red * 0.5 / 255,
+            baseColor.green * 0.5 / 255,
+            baseColor.blue * 0.5 / 255,
+            1
+        );
+        
+        cr.setSource(metallicGradient);
+        cr.setLineWidth(options.line_width * 1.5);
+        cr.arc(0, 0, eyeRad, 0, TWO_PI);
+        cr.strokePreserve();
+        Clutter.cairo_set_source_color(cr, baseColor);
+        cr.fill();
+        
+        // Prepare iris colors
+        const irisColor = options.iris_color;
+        const darkIrisColor = new Clutter.Color({
+            red: irisColor.red * 0.7,
+            green: irisColor.green * 0.7,
+            blue: irisColor.blue * 0.7,
+            alpha: irisColor.alpha
+        });
+
+        // Draw hexagonal iris
+        cr.rotate(mouseAng);
+        cr.translate(irisR * Math.sin(eyeAng), 0);
+        const irisScaleX = irisRad * Math.cos(eyeAng);
+        cr.scale(irisScaleX, irisRad);
+        // Iris gradient
+        const irisGradient = new Cairo.RadialGradient(0, 0, 0, 0, 0, 1);
+        irisGradient.addColorStopRGBA(
+            0,
+            irisColor.red / 255,
+            irisColor.green / 255,
+            irisColor.blue / 255,
+            1
+        );
+        irisGradient.addColorStopRGBA(
+            1,
+            darkIrisColor.red / 255,
+            darkIrisColor.green / 255,
+            darkIrisColor.blue / 255,
+            1
+        );
+        cr.setSource(irisGradient);
+        
+        // Hexagonal pattern
+        const hexSize = 1.2;
+        const hexAngle = TWO_PI / 6;
+        cr.moveTo(hexSize, 0);
+        for(let i = 1; i <= 6; i++) {
+            const angle = i * hexAngle;
+            cr.lineTo(hexSize * Math.cos(angle), hexSize * Math.sin(angle));
+        }
+        cr.closePath();
+        cr.fill();
+
+        // Circuit pattern using iris color
+        cr.setSourceRGBA(
+            Math.min(irisColor.red * 1.2 / 255, 1),
+            Math.min(irisColor.green * 1.2 / 255, 1),
+            Math.min(irisColor.blue * 1.2 / 255, 1),
+            0.3
+        );
+        cr.setLineWidth(0.1);
+        for(let i = 0; i < 12; i++) {
+            const angle = i * (TWO_PI / 12);
+            cr.moveTo(Math.cos(angle) * 0.4, Math.sin(angle) * 0.4);
+            cr.lineTo(Math.cos(angle) * 1.2, Math.sin(angle) * 1.2);
+            cr.stroke();
+        }
+
+        // Pupil using pupil_color
+        cr.translate(eyeRad * Math.sin(eyeAng), 0);
+        const pupilScaleX = pupilRad * Math.cos(eyeAng);
+        cr.scale(pupilScaleX, pupilRad);
+        
+        // Main pupil
+        Clutter.cairo_set_source_color(cr, options.pupil_color);
+        cr.arc(0, 0, 0.8, 0, TWO_PI);
+        cr.fill();
+        
+        // Aperture blades using base color
+        cr.setSourceRGBA(
+            baseColor.red / 255,
+            baseColor.green / 255,
+            baseColor.blue / 255,
+            0.8
+        );
+        cr.setLineWidth(0.15);
+        for(let i = 0; i < 8; i++) {
+            cr.rotate(TWO_PI / 8);
+            cr.arc(0, 0, 0.9, -0.2, 0.2);
+            cr.stroke();
+        }
+
+        // Central sensor using pupil color
+        cr.setSourceRGBA(
+            Math.min(options.pupil_color.red * 1.5 / 255, 1),
+            Math.min(options.pupil_color.green * 1.5 / 255, 1),
+            Math.min(options.pupil_color.blue * 1.5 / 255, 1),
+            0.8
+        );
+        cr.arc(0, 0, 0.3, 0, TWO_PI);
+        cr.fill();
+
+        // Holographic rings using iris color
+        cr.setSourceRGBA(
+            irisColor.red,
+            irisColor.green,
+            irisColor.blue,
+            0.3
+        );
+        cr.setLineWidth(0.05);
+        for(let i = 1; i <= 3; i++) {
+            cr.arc(0, 0, 0.4 + i * 0.2, 0, TWO_PI);
+            cr.stroke();
+        }
+
+        cr.restore();
+
+        // Outer glow using iris color
+        cr.save();
+        cr.translate(centerX, centerY);
+        const glowGradient = new Cairo.RadialGradient(0, 0, eyeRad * 0.7, 0, 0, eyeRad * 1.2);
+        glowGradient.addColorStopRGBA(0, irisColor.red, irisColor.green, irisColor.blue, 0.4);
+        glowGradient.addColorStopRGBA(1, irisColor.red, irisColor.green, irisColor.blue, 0);
+        cr.setSource(glowGradient);
+        cr.arc(0, 0, eyeRad * 1.2, 0, TWO_PI);
+        cr.fill();
+        cr.restore();
+    }
+}
 
 class EyeModeFactory {
     /**
@@ -229,7 +413,7 @@ class EyeModeFactory {
     static createEyeMode(mode) {
         switch (mode) {
             case "bulb":
-                return new BulbMode(mode);
+                return new RoboticEyeMode(mode);
 
             case "lids":
             default:
