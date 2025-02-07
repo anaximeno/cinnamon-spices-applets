@@ -59,92 +59,96 @@ class EyeMode {
 
 class EyelidMode extends EyeMode {
     drawEye(area, options) {
-        const [area_width, area_height] = area.allocation.get_size();
-        const mouse_x = options.mouse_x - options.area_x - area_width / 2;
-        const mouse_y = options.mouse_y - options.area_y - area_height / 2;
+        const TWO_PI = 2 * Math.PI;
+        const LID_TOP_FACTOR = 0.8;
+        const LID_BOTTOM_FACTOR = 0.6;
 
-        const mouse_ang = Math.atan2(mouse_y, mouse_x);
-        let mouse_rad = Math.sqrt(mouse_x * mouse_x + mouse_y * mouse_y);
+        const [areaWidth, areaHeight] = area.allocation.get_size();
+        const centerX = areaWidth / 2;
+        const centerY = areaHeight / 2;
 
-        const [top_size, lat_size] = this.topAndLatSizes(area_width, area_height, options);
-        let eye_rad = Math.min(top_size - options.padding, lat_size) / 2;
+        // Mouse position calculations
+        const mouseX = options.mouse_x - options.area_x - centerX;
+        const mouseY = options.mouse_y - options.area_y - centerY;
+        const mouseAng = Math.atan2(mouseY, mouseX);
+        let mouseRad = Math.hypot(mouseX, mouseY);
 
-        const iris_rad = eye_rad * 0.5;
-        const pupil_rad = iris_rad * 0.4;
+        // Eye dimensions
+        const [topSize, latSize] = this.topAndLatSizes(areaWidth, areaHeight, options);
+        const eyeRad = Math.min(topSize - options.padding, latSize) / 2;
 
-        const max_rad = eye_rad * (Math.pow(Math.cos(mouse_ang), 4) * 0.5 + 0.25);
+        // Feature sizes
+        const irisRad = eyeRad * 0.5;
+        const pupilRad = irisRad * 0.4;
 
-        mouse_rad = Math.min(mouse_rad, max_rad);
+        // Improved maxRad calculation using precomputed cosine
+        const cosAng = Math.cos(mouseAng);
+        const maxRad = eyeRad * ((cosAng ** 4) * 0.5 + 0.25);
+        mouseRad = Math.min(mouseRad, maxRad);
 
-        const iris_arc = Math.asin(iris_rad / eye_rad);
-        const iris_r = eye_rad * Math.cos(iris_arc);
+        // Simplified iris position math
+        const irisR = Math.sqrt(eyeRad ** 2 - irisRad ** 2);
+        const eyeAng = Math.atan(mouseRad / irisR);
 
-        const eye_ang = Math.atan(mouse_rad / iris_r);
-
-        let cr = area.get_context();
-        this.clearArea(cr, area_width, area_height);
-
+        const cr = area.get_context();
+        this.clearArea(cr, areaWidth, areaHeight);
         cr.save();
 
-        // -- Drawing the base of the eye
-
+        // Base eye drawing
+        cr.translate(centerX, centerY);
         Clutter.cairo_set_source_color(cr, options.base_color);
-
-        cr.translate(area_width * 0.5, area_height * 0.5);
         cr.setLineWidth(options.line_width);
 
-        const x_def = iris_rad * Math.cos(mouse_ang) * (Math.sin(eye_ang));
-        const y_def = iris_rad * Math.sin(mouse_ang) * (Math.sin(eye_ang));
+        // Eyelid path construction (reusable)
+        const createLidPath = () => {
+            const sinEyeAng = Math.sin(eyeAng);
+            const xDef = irisRad * cosAng * sinEyeAng;
+            const yDef = irisRad * Math.sin(mouseAng) * sinEyeAng;
 
-        const top_lid = 0.8;
-        const bottom_lid = 0.6;
+            cr.moveTo(-eyeRad, 0);
+            cr.curveTo(
+                xDef - irisRad, yDef + eyeRad * LID_TOP_FACTOR,
+                xDef + irisRad, yDef + eyeRad * LID_TOP_FACTOR,
+                eyeRad, 0
+            );
+            cr.curveTo(
+                xDef + irisRad, yDef - eyeRad * LID_BOTTOM_FACTOR,
+                xDef - irisRad, yDef - eyeRad * LID_BOTTOM_FACTOR,
+                -eyeRad, 0
+            );
+        };
 
-        let amp = eye_rad * top_lid;
-
-        cr.moveTo(-eye_rad, 0);
-        cr.curveTo(x_def - iris_rad, y_def + amp,
-            x_def + iris_rad, y_def + amp, eye_rad, 0);
-
-        amp = eye_rad * bottom_lid;
-        cr.curveTo(x_def + iris_rad, y_def - amp,
-            x_def - iris_rad, y_def - amp, -eye_rad, 0);
-
+        // Draw and fill/stroke lids
+        createLidPath();
         options.lids_fill ? cr.fill() : cr.stroke();
 
-        amp = eye_rad * top_lid;
-        cr.moveTo(-eye_rad, 0);
-        cr.curveTo(x_def - iris_rad, y_def + amp,
-            x_def + iris_rad, y_def + amp, eye_rad, 0);
-
-        amp = eye_rad * bottom_lid;
-        cr.curveTo(x_def + iris_rad, y_def - amp,
-            x_def - iris_rad, y_def - amp, -eye_rad, 0);
+        // Create clipping path
+        createLidPath();
         cr.clip();
 
-        // -- Drawing the iris of the eye
-
-        cr.rotate(mouse_ang);
-        cr.setLineWidth(options.line_width / iris_rad);
-
+        // Iris drawing
         Clutter.cairo_set_source_color(cr, options.iris_color);
-
-        cr.translate(iris_r * Math.sin(eye_ang), 0);
-        cr.scale(iris_rad * Math.cos(eye_ang), iris_rad);
-        cr.arc(0, 0, 1.0, 0, 2 * Math.PI);
-
+        cr.save();
+        cr.rotate(mouseAng);
+        cr.translate(irisR * Math.sin(eyeAng), 0);
+        
+        const irisScaleX = irisRad * Math.cos(eyeAng);
+        cr.scale(irisScaleX, irisRad);
+        cr.setLineWidth(options.line_width / irisRad);
+        cr.arc(0, 0, 1, 0, TWO_PI);
         options.lids_fill ? cr.fill() : cr.stroke();
+        cr.restore();
 
-        cr.scale(1 / (iris_rad * Math.cos(eye_ang)), 1 / iris_rad);
-        cr.translate(-iris_r * Math.sin(eye_ang), 0);
-
-        // -- Drawing the pupil of the eye
-
+        // Pupil drawing
         Clutter.cairo_set_source_color(cr, options.pupil_color);
-
-        cr.translate(eye_rad * Math.sin(eye_ang), 0);
-        cr.scale(pupil_rad * Math.cos(eye_ang), pupil_rad);
-        cr.arc(0, 0, 1.0, 0, 2 * Math.PI);
+        cr.save();
+        cr.translate(eyeRad * Math.sin(eyeAng), 0);
+        
+        const pupilScaleX = pupilRad * Math.cos(eyeAng);
+        cr.scale(pupilScaleX, pupilRad);
+        cr.arc(0, 0, 1, 0, TWO_PI);
         cr.fill();
+        cr.restore();
 
         cr.restore();
     }
@@ -153,66 +157,72 @@ class EyelidMode extends EyeMode {
 
 class BulbMode extends EyeMode {
     drawEye(area, options) {
-        const [area_width, area_height] = area.allocation.get_size();
-        const mouse_x = options.mouse_x - options.area_x - area_width / 2;
-        const mouse_y = options.mouse_y - options.area_y - area_height / 2;
+        const TWO_PI = 2 * Math.PI;
+        const [areaWidth, areaHeight] = area.allocation.get_size();
+        const centerX = areaWidth / 2;
+        const centerY = areaHeight / 2;
 
-        let mouse_rad = Math.sqrt(mouse_x * mouse_x + mouse_y * mouse_y);
-        const mouse_ang = Math.atan2(mouse_y, mouse_x);
+        // Calculate mouse position relative to the eye's center
+        const mouseX = options.mouse_x - options.area_x - centerX;
+        const mouseY = options.mouse_y - options.area_y - centerY;
 
-        const [top_size, lat_size] = this.topAndLatSizes(area_width, area_height, options);
-        let eye_rad = Math.min(top_size - options.padding, lat_size) / 2;
+        // Use hypot for more efficient and accurate radius calculation
+        let mouseRad = Math.hypot(mouseX, mouseY);
+        const mouseAng = Math.atan2(mouseY, mouseX);
 
-        const iris_rad = eye_rad * 0.6;
-        const pupil_rad = iris_rad * 0.4;
+        // Calculate eye dimensions
+        const [topSize, latSize] = this.topAndLatSizes(areaWidth, areaHeight, options);
+        const eyeRad = Math.min(topSize - options.padding, latSize) / 2;
 
-        const max_rad = eye_rad * Math.cos(Math.asin((iris_rad) / eye_rad)) - options.line_width;
+        // Iris and pupil radii (precompute for clarity)
+        const irisRad = eyeRad * 0.6;
+        const pupilRad = irisRad * 0.4;
 
-        mouse_rad = Math.min(mouse_rad, max_rad);
+        // Simplified max_rad using algebraic identity: sqrt(eyeRad² - irisRad²)
+        const maxRad = Math.sqrt(eyeRad ** 2 - irisRad ** 2) - options.line_width;
+        mouseRad = Math.min(mouseRad, maxRad);
 
-        const iris_arc = Math.asin(iris_rad / eye_rad);
-        const iris_r = eye_rad * Math.cos(iris_arc);
+        // Precompute iris radius in eye's coordinate system
+        const irisR = Math.sqrt(eyeRad ** 2 - irisRad ** 2);
+        const eyeAng = Math.atan(mouseRad / irisR);
 
-        const eye_ang = Math.atan(mouse_rad / iris_r);
-
-        let cr = area.get_context();
-        this.clearArea(cr, area_width, area_height);
+        const cr = area.get_context();
+        this.clearArea(cr, areaWidth, areaHeight);
 
         cr.save();
 
-        // -- Drawing the base of the eye
-
+        // Draw eye base
+        cr.translate(centerX, centerY);
         Clutter.cairo_set_source_color(cr, options.base_color);
-
-        cr.translate(area_width * 0.5, area_height * 0.5);
         cr.setLineWidth(options.line_width);
-        cr.arc(0, 0, eye_rad, 0, 2 * Math.PI);
-
+        cr.arc(0, 0, eyeRad, 0, TWO_PI);
         options.bulb_fill ? cr.fill() : cr.stroke();
 
-        // -- Drawing the iris of the eye
-
-        cr.rotate(mouse_ang);
-        cr.setLineWidth(options.line_width / iris_rad);
-
+        // Draw iris
         Clutter.cairo_set_source_color(cr, options.iris_color);
+        cr.rotate(mouseAng);
+        cr.translate(irisR * Math.sin(eyeAng), 0);
 
-        cr.translate(iris_r * Math.sin(eye_ang), 0);
-        cr.scale(iris_rad * Math.cos(eye_ang), iris_rad);
-        cr.arc(0, 0, 1.0, 0, 2 * Math.PI);
-
+        // Scale factors for the iris
+        const irisScaleX = irisRad * Math.cos(eyeAng);
+        cr.scale(irisScaleX, irisRad);
+        cr.setLineWidth(options.line_width / irisRad);
+        cr.arc(0, 0, 1, 0, TWO_PI);
         options.bulb_fill ? cr.fill() : cr.stroke();
 
-        cr.scale(1 / (iris_rad * Math.cos(eye_ang)), 1 / iris_rad);
-        cr.translate(-iris_r * Math.sin(eye_ang), 0);
+        // Reset iris transformations
+        cr.scale(1 / irisScaleX, 1 / irisRad);
+        cr.translate(-irisR * Math.sin(eyeAng), 0);
 
-        // -- Drawing the pupil of the eye
-
+        // Draw pupil
         Clutter.cairo_set_source_color(cr, options.pupil_color);
+        const pupilTranslation = eyeRad * Math.sin(eyeAng);
+        cr.translate(pupilTranslation, 0);
 
-        cr.translate(eye_rad * Math.sin(eye_ang), 0);
-        cr.scale(pupil_rad * Math.cos(eye_ang), pupil_rad);
-        cr.arc(0, 0, 1.0, 0, 2 * Math.PI);
+        // Scale factors for the pupil
+        const pupilScaleX = pupilRad * Math.cos(eyeAng);
+        cr.scale(pupilScaleX, pupilRad);
+        cr.arc(0, 0, 1, 0, TWO_PI);
         cr.fill();
 
         cr.restore();
