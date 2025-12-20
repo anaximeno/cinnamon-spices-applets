@@ -441,8 +441,8 @@ class Eye extends Applet.Applet {
 			this._last_eye_y == oy
 		) {
 			should_redraw = false;
-		} else if (this._last_mouse_x == undefined ||
-			this._last_mouse_y == undefined ||
+		} else if (this._last_mouse_x == null ||
+			this._last_mouse_y == null ||
 			this._last_eye_x != ox ||
 			this._last_eye_y != oy
 		) {
