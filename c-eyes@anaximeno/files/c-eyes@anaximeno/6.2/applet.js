@@ -81,9 +81,10 @@ class Eye extends Applet.Applet {
 
 		this.idle_monitor = new Helpers.IdleMonitor(this.idle_delay);
 
-		this.last_blink_start = null;
 		this.last_blink_end = null;
 		this.blink_rate = 0.00;
+		this.blink_steps_to_take = 2 * Math.max(1, Math.round(this.blink_period / this.repaint_interval));
+		this.blink_steps_taken = 0;
 
 		this.enabled = false;
 		this.set_active(true);
@@ -474,35 +475,24 @@ class Eye extends Applet.Applet {
 	}
 
 	check_blink_needed() {
-		if (!this.blink_effect_enabled) {
-			return false;
-		}
-
 		const now = Date.now();
 
-		if (this.last_blink_start === null ||
-			this.last_blink_end === null ||
-			this.last_blink_end + this.blink_gap < now
-		) {
-			this.last_blink_start = now;
-			this.last_blink_end = now + this.blink_period;
-			this.blink_rate = 0.00;
-			// global.log(Configs.UUID, `Eye/${this.instanceId} - starting blink`);
-			return true;
-		} else if (this.last_blink_start <= now && now <= this.last_blink_end) {
-			let progress = (now - this.last_blink_start) / this.blink_period;
-
-			if (progress <= 0.5) {
-				this.blink_rate = progress * 2;
+		if (!this.blink_effect_enabled || (this.last_blink_end !== null && ((this.last_blink_end + this.blink_gap) > now))) {
+			return false;
+		} else if ((this.blink_steps_to_take > 0) && (this.blink_steps_to_take > this.blink_steps_taken)) {
+			const halfSteps = this.blink_steps_to_take / 2;
+			if (this.blink_steps_taken < halfSteps) {
+				this.blink_rate = Math.round(10 * (this.blink_steps_taken / halfSteps)) / 10;
 			} else {
-				this.blink_rate = 2 - progress * 2;
+				this.blink_rate = Math.round(10 * ((this.blink_steps_to_take - this.blink_steps_taken) / halfSteps)) / 10;
 			}
-
-			this.blink_rate = Math.round(this.blink_rate * 100) / 100;
+			this.blink_steps_taken++;
 			return true;
-		} else if (this.blink_rate > 0.00) {
-			this.blink_rate = 0.00;
-			// global.log(Configs.UUID, `Eye/${this.instanceId} - ending blink`);
+		} else if (this.blink_steps_taken >= this.blink_steps_to_take) {
+			this.last_blink_end = Date.now();
+			this.blink_steps_to_take = 2 * Math.max(1, Math.round(this.blink_period / this.repaint_interval));
+			this.blink_steps_taken = 0;
+			this.blink_rate = 0;
 			return true;
 		}
 
